@@ -15,13 +15,18 @@ npm run dev
 - Deploy command: `npx wrangler deploy`
 - Root directory: `/`
 - Production branch: `main`
+- Instagram webhook: `/api/meta/webhook`
 
 Configura estas variables en Cloudflare antes de desplegar:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `META_APP_SECRET`
+- `META_WEBHOOK_VERIFY_TOKEN`
 
-Usa únicamente la clave publicable de Supabase en el frontend. Nunca añadas la clave secreta o `service_role` al repositorio.
+Las claves privadas deben configurarse como secretos de Cloudflare y nunca guardarse en el repositorio.
 
 ## Stack
 
