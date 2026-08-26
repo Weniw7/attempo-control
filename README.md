@@ -28,6 +28,8 @@ Configura estas variables en Cloudflare antes de desplegar:
 
 Las claves privadas deben configurarse como secretos de Cloudflare y nunca guardarse en el repositorio.
 
+Último despliegue forzado: 26 de agosto de 2026.
+
 ## Stack
 
 - React / Vinext
