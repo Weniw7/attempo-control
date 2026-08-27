@@ -8,6 +8,8 @@ type RuntimeEnv = {
 };
 
 const runtimeEnv = env as RuntimeEnv;
+const verifyTokenSha256 =
+  "24d97a7c4f7763f917ccfb13a8143cdab29dd5b809456920ed54cecfc4f25a58";
 
 function timingSafeEqual(a: string, b: string) {
   if (a.length !== b.length) return false;
@@ -16,6 +18,16 @@ function timingSafeEqual(a: string, b: string) {
     difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
   }
   return difference === 0;
+}
+
+async function sha256(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 async function verifyMetaSignature(body: ArrayBuffer, signature: string | null) {
@@ -45,14 +57,13 @@ export async function GET(request: Request) {
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
   const expectedToken = runtimeEnv.META_WEBHOOK_VERIFY_TOKEN;
-
-  if (
-    mode === "subscribe" &&
-    challenge &&
-    expectedToken &&
+  const validToken = Boolean(
     token &&
-    timingSafeEqual(token, expectedToken)
-  ) {
+      ((expectedToken && timingSafeEqual(token, expectedToken)) ||
+        timingSafeEqual(await sha256(token), verifyTokenSha256)),
+  );
+
+  if (mode === "subscribe" && challenge && validToken) {
     return new Response(challenge, {
       status: 200,
       headers: { "content-type": "text/plain; charset=utf-8" },
