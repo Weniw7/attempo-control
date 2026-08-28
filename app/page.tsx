@@ -136,7 +136,7 @@ export default function Home() {
           <div className="live-source"><i /> {data ? "Supabase en vivo" : "Conectando..."}</div>
         </header>
 
-        {error ? <ErrorPanel /> : !data ? <LoadingPanel /> : <ViewContent view={view} data={data} />}
+        {error ? <ErrorPanel error={error} /> : !data ? <LoadingPanel /> : <ViewContent view={view} data={data} />}
       </section>
     </main>
   );
@@ -315,8 +315,9 @@ function LoadingPanel() {
   return <EmptyPanel eyebrow="SINCRONIZANDO" title="Leyendo Supabase" description="Cargando proveedores, conversaciones y mensajes reales." />;
 }
 
-function ErrorPanel() {
-  return <EmptyPanel eyebrow="ERROR DE DATOS" title="No se pudo leer Supabase" description="La interfaz está preparada para datos reales, pero la API no ha podido completar la consulta. Revisa las variables server-side del Worker." />;
+function ErrorPanel({ error }: { error: string }) {
+  const detail = error.length > 220 ? `${error.slice(0, 220)}…` : error;
+  return <EmptyPanel eyebrow="ERROR DE DATOS" title="No se pudo leer Supabase" description={`La API no ha podido completar la consulta. Detalle técnico: ${detail}`} />;
 }
 
 function initials(value: string) {
