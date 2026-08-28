@@ -7,7 +7,6 @@ export async function GET() {
       method: "POST",
       headers: {
         apikey: supabasePublishableKey,
-        authorization: `Bearer ${supabasePublishableKey}`,
         "content-type": "application/json",
       },
       body: "{}",
