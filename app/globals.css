@@ -127,6 +127,15 @@ td:first-child small{font-size:8px;color:#93958b}
 .margin-card p{font-size:10px;color:#b9c7a3;background:#373c2e;padding:10px}
 .margin-card button{width:100%;background:#e5e3d7;border:0;border-radius:6px;padding:11px}
 .toast{position:fixed;right:25px;bottom:25px;background:#2d3225;color:white;padding:13px 18px;border-radius:7px;font-size:11px;box-shadow:0 10px 30px #0002}
+.live-source,.connection-badge{display:flex;align-items:center;gap:8px;color:#65704c;font-size:11px;font-weight:700}
+.live-source i,.connection-badge i{width:8px;height:8px;border-radius:50%;background:#82965f;box-shadow:0 0 0 4px #82965f22}
+.clean-strip{min-height:126px}
+.connection-badge{background:#f1f3e9;border:1px solid #cbd0bd;border-radius:999px;padding:10px 14px;white-space:nowrap}
+.empty-dashboard{min-height:470px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.empty-dashboard>span{font-size:9px;letter-spacing:.18em;color:#898b7e;font-weight:700;margin-top:20px}
+.empty-dashboard h2{font:500 27px Georgia,serif;margin:8px 0 10px}
+.empty-dashboard p{max-width:510px;margin:0;color:#77796f;font-size:12px;line-height:1.7}
+.empty-mark{width:58px;height:58px;border:1px solid #aaa991;color:#656b4e;display:grid;place-items:center;font:italic 32px Georgia,serif}
 @media(max-width:1050px){.dashboard-grid,.cost-layout{grid-template-columns:1fr}
 .metrics{grid-template-columns:repeat(2,1fr)}
 .kanban{grid-template-columns:1fr}
