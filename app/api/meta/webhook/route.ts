@@ -7,6 +7,27 @@ type RuntimeEnv = {
   SUPABASE_SERVICE_ROLE_KEY?: string;
 };
 
+type InstagramMessage = {
+  sender?: { id?: string };
+  recipient?: { id?: string };
+  timestamp?: number;
+  message?: {
+    mid?: string;
+    text?: string;
+    attachments?: Array<{ type?: string }>;
+    is_echo?: boolean;
+  };
+};
+
+type InstagramPayload = {
+  object?: string;
+  entry?: Array<{
+    id?: string;
+    time?: number;
+    messaging?: InstagramMessage[];
+  }>;
+};
+
 const runtimeEnv = env as RuntimeEnv;
 const verifyTokenSha256 =
   "24d97a7c4f7763f917ccfb13a8143cdab29dd5b809456920ed54cecfc4f25a58";
@@ -51,6 +72,119 @@ async function verifyMetaSignature(body: ArrayBuffer, signature: string | null) 
   return timingSafeEqual(expected, signature);
 }
 
+async function supabaseRequest<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const supabaseUrl = runtimeEnv.SUPABASE_URL;
+  const serviceRoleKey = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Webhook storage is not configured");
+  }
+
+  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: serviceRoleKey,
+      authorization: `Bearer ${serviceRoleKey}`,
+      "content-type": "application/json",
+      ...init.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase ${response.status}: ${detail.slice(0, 300)}`);
+  }
+
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+function messageBody(message: InstagramMessage["message"]) {
+  if (message?.text) return message.text;
+  const attachmentType = message?.attachments?.[0]?.type;
+  return attachmentType ? `[Adjunto: ${attachmentType}]` : "[Mensaje sin texto]";
+}
+
+async function processInstagramMessage(
+  accountId: string,
+  event: InstagramMessage,
+) {
+  const messageId = event.message?.mid;
+  const senderId = event.sender?.id;
+  const recipientId = event.recipient?.id;
+  if (!messageId || !senderId || !recipientId) return false;
+
+  const outbound = Boolean(event.message?.is_echo || senderId === accountId);
+  const instagramUserId = outbound ? recipientId : senderId;
+  if (!instagramUserId || instagramUserId === accountId) return false;
+
+  const organizationId = "7c958ab7-f949-4557-9460-f70da79b9d1f";
+  const occurredAt = new Date(event.timestamp ?? Date.now()).toISOString();
+
+  const contacts = await supabaseRequest<Array<{ id: string }>>(
+    "contacts?on_conflict=organization_id,instagram_user_id&select=id",
+    {
+      method: "POST",
+      headers: { prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        organization_id: organizationId,
+        instagram_user_id: instagramUserId,
+        full_name: `Instagram ${instagramUserId.slice(-6)}`,
+        contact_type: "other",
+        status: "active",
+        updated_at: occurredAt,
+      }),
+    },
+  );
+  const contactId = contacts[0]?.id;
+  if (!contactId) throw new Error("Instagram contact upsert returned no ID");
+
+  const conversations = await supabaseRequest<Array<{ id: string }>>(
+    "conversations?on_conflict=organization_id,channel,external_thread_id&select=id",
+    {
+      method: "POST",
+      headers: { prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        organization_id: organizationId,
+        contact_id: contactId,
+        channel: "instagram",
+        external_thread_id: instagramUserId,
+        subject: "Conversación de Instagram",
+        priority: "medium",
+        status: outbound ? "awaiting_them" : "awaiting_us",
+        approval_status: "not_required",
+        last_message_at: occurredAt,
+        updated_at: occurredAt,
+      }),
+    },
+  );
+  const conversationId = conversations[0]?.id;
+  if (!conversationId) throw new Error("Instagram conversation upsert returned no ID");
+
+  await supabaseRequest(
+    "messages?on_conflict=organization_id,external_message_id",
+    {
+      method: "POST",
+      headers: { prefer: "resolution=ignore-duplicates,return=minimal" },
+      body: JSON.stringify({
+        organization_id: organizationId,
+        conversation_id: conversationId,
+        external_message_id: messageId,
+        direction: outbound ? "outbound" : "inbound",
+        sender_name: outbound ? "Attempo" : `Instagram ${instagramUserId.slice(-6)}`,
+        body: messageBody(event.message),
+        ai_generated: false,
+        sent_at: occurredAt,
+      }),
+    },
+  );
+
+  return true;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("hub.mode");
@@ -84,16 +218,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid Meta signature" }, { status: 401 });
   }
 
-  const supabaseUrl = runtimeEnv.SUPABASE_URL;
-  const serviceRoleKey = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!runtimeEnv.SUPABASE_URL || !runtimeEnv.SUPABASE_SERVICE_ROLE_KEY) {
     return Response.json({ error: "Webhook storage is not configured" }, { status: 503 });
   }
 
-  const payload = JSON.parse(new TextDecoder().decode(body)) as {
-    object?: string;
-    entry?: Array<{ id?: string; time?: number; messaging?: Array<{ message?: { mid?: string } }> }>;
-  };
+  const payload = JSON.parse(new TextDecoder().decode(body)) as InstagramPayload;
   const firstEntry = payload.entry?.[0];
   const metaEventId =
     firstEntry?.messaging?.[0]?.message?.mid ??
@@ -101,27 +230,58 @@ export async function POST(request: Request) {
       ? `${firstEntry.id}:${firstEntry.time}`
       : null);
 
-  const response = await fetch(
-    `${supabaseUrl.replace(/\/$/, "")}/rest/v1/instagram_webhook_events`,
-    {
-      method: "POST",
-      headers: {
-        apikey: serviceRoleKey,
-        authorization: `Bearer ${serviceRoleKey}`,
-        "content-type": "application/json",
-        prefer: "resolution=ignore-duplicates,return=minimal",
+  try {
+    await supabaseRequest(
+      "instagram_webhook_events?on_conflict=meta_event_id",
+      {
+        method: "POST",
+        headers: { prefer: "resolution=ignore-duplicates,return=minimal" },
+        body: JSON.stringify({
+          meta_event_id: metaEventId,
+          object_type: payload.object ?? "instagram",
+          payload,
+        }),
       },
-      body: JSON.stringify({
-        meta_event_id: metaEventId,
-        object_type: payload.object ?? "instagram",
-        payload,
-      }),
-    },
-  );
+    );
 
-  if (!response.ok) {
-    return Response.json({ error: "Webhook storage failed" }, { status: 502 });
+    let processed = 0;
+    for (const entry of payload.entry ?? []) {
+      for (const event of entry.messaging ?? []) {
+        if (await processInstagramMessage(entry.id ?? "", event)) processed += 1;
+      }
+    }
+
+    if (metaEventId) {
+      await supabaseRequest(
+        `instagram_webhook_events?meta_event_id=eq.${encodeURIComponent(metaEventId)}`,
+        {
+          method: "PATCH",
+          headers: { prefer: "return=minimal" },
+          body: JSON.stringify({
+            processing_status: processed > 0 ? "processed" : "ignored",
+            processed_at: new Date().toISOString(),
+            error_message: null,
+          }),
+        },
+      );
+    }
+
+    return Response.json({ received: true, processed });
+  } catch (error) {
+    if (metaEventId) {
+      await supabaseRequest(
+        `instagram_webhook_events?meta_event_id=eq.${encodeURIComponent(metaEventId)}`,
+        {
+          method: "PATCH",
+          headers: { prefer: "return=minimal" },
+          body: JSON.stringify({
+            processing_status: "failed",
+            error_message: error instanceof Error ? error.message.slice(0, 500) : "Unknown error",
+          }),
+        },
+      ).catch(() => undefined);
+    }
+
+    return Response.json({ error: "Webhook processing failed" }, { status: 502 });
   }
-
-  return Response.json({ received: true });
 }
