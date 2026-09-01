@@ -193,14 +193,16 @@ export async function POST(request: Request) {
   }
 
   const triggerSource = request.headers.get("x-sync-source") === "cron" ? "cron" : "manual";
-  const runs = await supabaseRequest<Array<{ id: string }>>("instagram_sync_runs?select=id", {
-    method: "POST",
-    headers: { prefer: "return=representation" },
-    body: JSON.stringify({ status: "running", trigger_source: triggerSource }),
-  });
-  const runId = runs[0]?.id;
+  let runId: string | undefined;
 
   try {
+    const runs = await supabaseRequest<Array<{ id: string }>>("instagram_sync_runs?select=id", {
+      method: "POST",
+      headers: { prefer: "return=representation" },
+      body: JSON.stringify({ status: "running", trigger_source: triggerSource }),
+    });
+    runId = runs[0]?.id;
+
     const subscriptionRepaired = await repairSubscription();
     const fields = encodeURIComponent(
       "id,updated_time,participants,messages.limit(100){id,created_time,from,to,message}",
