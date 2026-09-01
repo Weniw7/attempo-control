@@ -4,6 +4,7 @@ import handler from "vinext/server/app-router-entry";
 
 interface Env {
   ASSETS: Fetcher;
+  META_WEBHOOK_VERIFY_TOKEN?: string;
   DB: D1Database;
   IMAGES: {
     input(stream: ReadableStream): {
@@ -41,6 +42,20 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!env.META_WEBHOOK_VERIFY_TOKEN) return;
+    ctx.waitUntil(
+      fetch("https://attempo-control.alfonso-millan.workers.dev/api/meta/sync", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${env.META_WEBHOOK_VERIFY_TOKEN}`,
+          "x-sync-source": "cron",
+        },
+      }).then((response) => {
+        if (!response.ok) throw new Error(`Instagram sync failed with ${response.status}`);
+      }),
+    );
   },
 };
 
