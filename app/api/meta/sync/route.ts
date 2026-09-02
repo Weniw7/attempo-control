@@ -38,7 +38,7 @@ function timingSafeEqual(a: string, b: string) {
 }
 
 async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const url = runtimeEnv.SUPABASE_URL;
+  const url = runtimeEnv.SUPABASE_URL || "https://xagptutyzrkmjyjnwfoi.supabase.co";
   const key = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
   const missing = [
     !url ? "SUPABASE_URL" : null,
