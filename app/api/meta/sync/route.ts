@@ -40,9 +40,14 @@ function timingSafeEqual(a: string, b: string) {
 async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const url = runtimeEnv.SUPABASE_URL;
   const key = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Supabase runtime variables are missing");
+  const missing = [
+    !url ? "SUPABASE_URL" : null,
+    !key ? "SUPABASE_SERVICE_ROLE_KEY" : null,
+  ].filter(Boolean);
+  if (missing.length) throw new Error(`Missing runtime variable(s): ${missing.join(", ")}`);
 
-  const response = await fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
+  const supabaseBase = url.replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
+  const response = await fetch(`${supabaseBase}/rest/v1/${path}`, {
     ...init,
     headers: {
       apikey: key,
