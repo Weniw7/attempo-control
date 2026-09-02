@@ -166,14 +166,11 @@ async function upsertConversation(conversation: GraphConversation) {
   const conversationId = conversations[0]?.id;
   if (!conversationId) throw new Error(`Conversation upsert failed for ${participant.id}`);
 
-  let messagesUpserted = 0;
-  for (const message of messages) {
-    if (!message.id) continue;
-    const outbound = message.from?.id === accountId;
-    await supabaseRequest("messages?on_conflict=organization_id,external_message_id", {
-      method: "POST",
-      headers: { prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify({
+  const messageRows = messages
+    .filter((message): message is GraphMessage & { id: string } => Boolean(message.id))
+    .map((message) => {
+      const outbound = message.from?.id === accountId;
+      return {
         organization_id: organizationId,
         conversation_id: conversationId,
         external_message_id: message.id,
@@ -182,12 +179,18 @@ async function upsertConversation(conversation: GraphConversation) {
         body: message.message || "[Mensaje multimedia]",
         ai_generated: false,
         sent_at: message.created_time ?? null,
-      }),
+      };
     });
-    messagesUpserted += 1;
+
+  if (messageRows.length) {
+    await supabaseRequest("messages?on_conflict=organization_id,external_message_id", {
+      method: "POST",
+      headers: { prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(messageRows),
+    });
   }
 
-  return { messagesSeen: messages.length, messagesUpserted };
+  return { messagesSeen: messages.length, messagesUpserted: messageRows.length };
 }
 
 export async function POST(request: Request) {
@@ -213,7 +216,8 @@ export async function POST(request: Request) {
       "id,updated_time,participants,messages.limit(100){id,created_time,from,to,message}",
     );
     const conversations = await collectPages<GraphConversation>(
-      `${accountId}/conversations?platform=instagram&fields=${fields}&limit=100`,
+      `${accountId}/conversations?platform=instagram&fields=${fields}&limit=10`,
+      true,
     );
 
     let messagesSeen = 0;
