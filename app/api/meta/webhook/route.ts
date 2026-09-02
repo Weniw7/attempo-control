@@ -82,7 +82,8 @@ async function supabaseRequest<T>(
     throw new Error("Webhook storage is not configured");
   }
 
-  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/${path}`, {
+  const supabaseBase = supabaseUrl.replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
+  const response = await fetch(`${supabaseBase}/rest/v1/${path}`, {
     ...init,
     headers: {
       apikey: serviceRoleKey,
