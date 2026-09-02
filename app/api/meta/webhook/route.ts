@@ -76,7 +76,7 @@ async function supabaseRequest<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const supabaseUrl = runtimeEnv.SUPABASE_URL;
+  const supabaseUrl = runtimeEnv.SUPABASE_URL || "https://xagptutyzrkmjyjnwfoi.supabase.co";
   const serviceRoleKey = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error("Webhook storage is not configured");
